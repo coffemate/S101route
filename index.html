@@ -119,7 +119,6 @@
     closureMarkers: [],
     scenicMarkers: []
   };
-  let closureRangeKm = { start: 21, end: 64 };
 
   const visibility = {
     s101: true,
@@ -172,68 +171,60 @@
     return marker;
   }
 
-  async function loadAllRoutes(mapData) {
-    const fetchRoute = async (plan) => {
-      const origin = plan.origin;
-      const destination = plan.destination;
-      const waypoints = (plan.waypoints || []).join('|');
-      const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
-      const data = await safeFetch(url);
-      if (!data.success || !Array.isArray(data.polyline)) throw new Error('路线返回异常');
-      return data.polyline;
-    };
-
-    const s101Plan = mapData.routePlans.s101;
-    const westPlan = mapData.routePlans.west;
-    const g312Plan = mapData.routePlans.g312;
-
-    const [s101Path, westPath, g312Path] = await Promise.all([
-      fetchRoute(s101Plan),
-      fetchRoute(westPlan),
-      fetchRoute(g312Plan)
-    ]);
-
-    function haversineKm(a, b) {
-      const [lng1, lat1] = a;
-      const [lng2, lat2] = b;
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLng = (lng2 - lng1) * Math.PI / 180;
-      const s1 = Math.sin(dLat / 2) ** 2;
-      const s2 = Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-      return 2 * R * Math.asin(Math.sqrt(s1 + s2));
+  async function loadRoute({ origin, destination, waypoints, color }) {
+    console.log('请求路线:', origin, destination);
+    const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints || '')}`;
+    const data = await safeFetch(url);
+    if (!data.success || !Array.isArray(data.polyline)) {
+      console.error('路线获取失败');
+      return null;
     }
+    console.log('路线点数量:', data.polyline.length);
+    console.log('当前使用路径数据:', data.polyline.slice(0, 5));
 
-    function cutPathByKm(path, startKm, endKm) {
-      if (!Array.isArray(path) || path.length < 2) return [];
-      let total = 0;
-      const result = [];
-      for (let i = 1; i < path.length; i += 1) {
-        const prev = path[i - 1];
-        const curr = path[i];
-        const seg = haversineKm(prev, curr);
-        const from = total;
-        const to = total + seg;
-        if (to >= startKm && from <= endKm) {
-          if (result.length === 0) result.push(prev);
-          result.push(curr);
-        }
-        total = to;
-      }
-      return result;
+    const polyline = new AMap.Polyline({
+      path: data.polyline,
+      strokeColor: color,
+      strokeWeight: 5,
+      strokeOpacity: 0.9
+    });
+    polyline.setMap(map);
+    return polyline;
+  }
+
+  async function loadAllRoutes() {
+    layers.s101Polyline = await loadRoute({
+      origin: '87.26,43.40',
+      destination: '85.97,43.94',
+      waypoints: '87.18,43.88|86.95,43.89|86.75,43.88',
+      color: '#FF6B00'
+    });
+    layers.westPolyline = await loadRoute({
+      origin: '87.278,44.009',
+      destination: '86.637,43.91',
+      waypoints: '87.207,43.93|87.10,43.93|86.82,43.97',
+      color: '#2e7d32'
+    });
+    layers.g312Polyline = await loadRoute({
+      origin: '87.278,44.009',
+      destination: '86.637,43.91',
+      waypoints: '86.60,44.18|86.65,44.12',
+      color: '#1976d2'
+    });
+
+    if (layers.s101Polyline) {
+      const fullPath = layers.s101Polyline.getPath();
+      const startIndex = Math.floor(fullPath.length * 0.18);
+      const endIndex = Math.floor(fullPath.length * 0.52);
+      const closureSegment = fullPath.slice(startIndex, endIndex);
+      layers.closureLine = new AMap.Polyline({
+        path: closureSegment,
+        strokeColor: '#d32f2f',
+        strokeWeight: 6,
+        strokeStyle: 'dashed'
+      });
+      layers.closureLine.setMap(map);
     }
-
-    const closurePath = cutPathByKm(s101Path, closureRangeKm.start, closureRangeKm.end);
-
-    layers.s101Polyline = new AMap.Polyline({ path: s101Path, strokeColor: '#ff6b00', strokeWeight: 5, zIndex: 80 });
-    layers.westPolyline = new AMap.Polyline({ path: westPath, strokeColor: '#2e7d32', strokeWeight: 4, zIndex: 70 });
-    layers.g312Polyline = new AMap.Polyline({ path: g312Path, strokeColor: '#1976d2', strokeWeight: 4, zIndex: 65 });
-    layers.closureLine = new AMap.Polyline({ path: closurePath, strokeColor: '#d32f2f', strokeWeight: 5, strokeStyle: 'solid', zIndex: 90 });
-
-    layers.s101Polyline.setMap(map);
-    layers.westPolyline.setMap(map);
-    layers.g312Polyline.setMap(map);
-    layers.closureLine.setMap(map);
   }
 
   function loadStaticLayers(mapData) {
@@ -297,9 +288,8 @@
 
     try {
       const mapData = await safeFetch(`${API_BASE}/api/map-data`);
-      closureRangeKm = mapData.closureRangeKm || closureRangeKm;
       loadStaticLayers(mapData);
-      await loadAllRoutes(mapData);
+      await loadAllRoutes();
       map.on('click', e => {
         console.log('坐标:', e.lnglat);
       });

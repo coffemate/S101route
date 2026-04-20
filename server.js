@@ -202,6 +202,7 @@ app.get('/api/route', async (req, res) => {
     routeCache.set(cacheKey, payload);
 
     console.log('路线点数量:', polyline.length);
+    console.log('返回polyline长度:', polyline.length);
     console.log('====== END ======');
     return res.json(payload);
   } catch (error) {
