@@ -117,6 +117,7 @@ app.get('/api/map-data', (_req, res) => {
 
 app.get('/api/route', async (req, res) => {
   const { origin, destination, waypoints = '' } = req.query;
+  console.log('路径请求:', origin, destination);
 
   if (!origin || !destination) {
     console.log('====== END ======');

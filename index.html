@@ -3,87 +3,137 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>S101 路线图（前后端分离 / Canvas）</title>
+  <title>S101 绕行地图（安全合规版）</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: "微软雅黑", "Segoe UI", sans-serif; background: #2c3e2f; min-height: 100vh; padding: 20px; }
-    .map-container { max-width: 1300px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    body {
+      font-family: "微软雅黑", "Segoe UI", sans-serif;
+      background: #2c3e2f;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .map-container {
+      width: 1300px;
+      max-width: 100%;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
     .map-title { background: #1e3a2f; color: #fff; padding: 14px 20px; }
     .map-title h1 { font-size: 1.25rem; margin-bottom: 4px; }
-    .map-title p { opacity: .85; font-size: .85rem; }
-    #mapWrap { position: relative; width: 100%; height: 560px; background: #f7f8fa; }
-    #mapCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
-    #mapCanvas.dragging { cursor: grabbing; }
-    .status { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; color: #333; }
-    .control-bar { background: #f8f5f0; border-top: 1px solid #ddd; padding: 12px 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .control-btn { border: 2px solid #ccc; background: #fff; border-radius: 20px; padding: 6px 12px; cursor: pointer; font-size: .85rem; font-weight: bold; }
+    .map-title p { font-size: 0.85rem; opacity: 0.85; }
+    #map { width: 100%; height: 560px; }
+    .control-bar {
+      background: #f8f5f0;
+      border-top: 1px solid #ddd;
+      padding: 12px 18px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .control-btn {
+      border: 2px solid #ccc;
+      background: #fff;
+      border-radius: 20px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: bold;
+    }
     .control-btn.active { background: #1e3a2f; border-color: #1e3a2f; color: #fff; }
     .control-btn[data-type="closure"] { border-left: 6px solid #d32f2f; }
     .control-btn[data-type="west"] { border-left: 6px solid #2e7d32; }
     .control-btn[data-type="g312"] { border-left: 6px solid #1976d2; }
     .control-btn[data-type="scenic"] { border-left: 6px solid #ff9800; }
     .locate-btn { margin-left: auto; background: #4caf50; border-color: #2e7d32; color: #fff; }
-    .search-box { display: flex; gap: 8px; }
-    .search-box input { border: 1px solid #ccc; border-radius: 8px; padding: 6px 10px; min-width: 220px; }
-    .legend { padding: 10px 18px; background: #fffaf5; border-top: 1px solid #eee; display: flex; flex-wrap: wrap; gap: 16px; font-size: .75rem; }
+    .legend {
+      padding: 10px 18px;
+      background: #fffaf5;
+      border-top: 1px solid #eee;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: .75rem;
+    }
     .legend-item { display: flex; align-items: center; gap: 6px; }
     .legend-color { width: 20px; height: 4px; border-radius: 3px; }
     .legend-color.marker { width: 10px; height: 10px; border-radius: 50%; }
     .red { background: #d32f2f; } .green { background: #2e7d32; } .blue { background: #1976d2; } .orange { background: #ff9800; }
     .info-footer { background: #fff9f0; color: #666; text-align: center; padding: 8px 16px; font-size: .7rem; }
   </style>
+
+  <!-- 必须先设置 securityJsCode -->
+  <script>
+    window._AMapSecurityConfig = {
+      securityJsCode: 'YOUR_SECURITY_JS_CODE'
+    };
+  </script>
+  <!-- 仅 JS Key 用于加载地图底图 -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=YOUR_JS_KEY"></script>
 </head>
 <body>
-<div class="map-container">
-  <div class="map-title">
-    <h1>🚧 S101线封闭施工绕行图（Canvas 绘制）</h1>
-    <p>前端仅请求本地接口：/api/map-data、/api/route、/api/geocode</p>
-  </div>
-
-  <div id="mapWrap">
-    <canvas id="mapCanvas"></canvas>
-    <div class="status" id="status">初始化中...</div>
-  </div>
-
-  <div class="control-bar">
-    <button class="control-btn active" data-type="s101" id="toggleS101">🛣️ S101主线</button>
-    <button class="control-btn active" data-type="closure" id="toggleClosure">🚫 封闭路段</button>
-    <button class="control-btn active" data-type="west" id="toggleWest">🟢 西部绕行</button>
-    <button class="control-btn active" data-type="g312" id="toggleG312">🔵 312国道绕行</button>
-    <button class="control-btn active" data-type="scenic" id="toggleScenic">🏞️ 景点</button>
-    <div class="search-box">
-      <input id="addressInput" placeholder="输入地址并定位（调用 /api/geocode）" />
-      <button class="control-btn" id="searchBtn">📍 地址定位</button>
+  <div class="map-container">
+    <div class="map-title">
+      <h1>🚧 S101线封闭施工绕行图（高德底图 + 后端路径代理）</h1>
+      <p>前端只做展示与交互；路径规划仅通过本地后端 /api/route</p>
     </div>
-    <button class="control-btn locate-btn" id="locateBtn">📌 我的位置</button>
-  </div>
 
-  <div class="legend">
-    <div class="legend-item"><div class="legend-color red"></div><span>封闭施工段</span></div>
-    <div class="legend-item"><div class="legend-color green"></div><span>西部绕行</span></div>
-    <div class="legend-item"><div class="legend-color blue"></div><span>G312绕行</span></div>
-    <div class="legend-item"><div class="legend-color marker orange"></div><span>景点</span></div>
-    <div class="legend-item"><div class="legend-color marker blue"></div><span>定位点</span></div>
-  </div>
+    <div id="map"></div>
 
-  <div class="info-footer">鼠标滚轮缩放，拖拽平移；点击点位查看名称。</div>
-</div>
+    <div class="control-bar">
+      <button class="control-btn active" data-type="s101" id="toggleS101">🛣️ S101主线</button>
+      <button class="control-btn active" data-type="closure" id="toggleClosure">🚫 封闭路段</button>
+      <button class="control-btn active" data-type="west" id="toggleWest">🟢 西部绕行</button>
+      <button class="control-btn active" data-type="g312" id="toggleG312">🔵 312国道绕行</button>
+      <button class="control-btn active" data-type="scenic" id="toggleScenic">🏞️ 景点</button>
+      <button class="control-btn locate-btn" id="locateBtn">📍 我的位置</button>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-color red"></div><span>封闭施工段</span></div>
+      <div class="legend-item"><div class="legend-color green"></div><span>西部绕行</span></div>
+      <div class="legend-item"><div class="legend-color blue"></div><span>G312绕行</span></div>
+      <div class="legend-item"><div class="legend-color marker orange"></div><span>景点</span></div>
+      <div class="legend-item"><div class="legend-color marker blue"></div><span>用户定位</span></div>
+    </div>
+
+    <div class="info-footer">安全说明：Web服务 Key 仅存放后端 .env，前端不包含 Web 服务 Key。</div>
+  </div>
 
 <script>
 (() => {
-  const canvas = document.getElementById('mapCanvas');
-  const ctx = canvas.getContext('2d');
-  const statusEl = document.getElementById('status');
   const API_BASE = 'http://127.0.0.1:3000';
+  let map;
+  let userMarker = null;
+
+  const layers = {
+    s101Polyline: null,
+    westPolyline: null,
+    g312Polyline: null,
+    closureLine: null,
+    closureMarkers: [],
+    scenicMarkers: []
+  };
+
+  const visibility = {
+    s101: true,
+    closure: true,
+    west: true,
+    g312: true,
+    scenic: true
+  };
 
   async function safeFetch(url) {
     const res = await fetch(url);
     const text = await res.text();
     try {
       const data = JSON.parse(text);
-      if (!res.ok) {
-        throw new Error(data.message || `HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
       return data;
     } catch (e) {
       console.error('接口返回非JSON:', text);
@@ -91,316 +141,156 @@
     }
   }
 
-  const state = {
-    data: null,
-    s101Route: [],
-    westRoute: [],
-    g312Route: [],
-    userPoint: null,
-    queryPoint: null,
-    visible: { s101: true, closure: true, west: true, g312: true, scenic: true },
-    zoom: 1,
-    minLng: 0,
-    minLat: 0,
-    maxLng: 0,
-    maxLat: 0,
-    offsetX: 0,
-    offsetY: 0,
-    isDragging: false,
-    dragStart: null,
-    hoverLabel: '',
-    pointsForHit: []
-  };
-
-  function setStatus(msg) {
-    statusEl.textContent = msg;
-  }
-
-  function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.floor(rect.width * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw();
-  }
-
-  function pointToScreen(point) {
-    const [lng, lat] = point;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const xRatio = (lng - state.minLng) / Math.max(1e-6, state.maxLng - state.minLng);
-    const yRatio = (lat - state.minLat) / Math.max(1e-6, state.maxLat - state.minLat);
-    const px = xRatio * width * state.zoom + state.offsetX;
-    const py = (1 - yRatio) * height * state.zoom + state.offsetY;
-    return [px, py];
-  }
-
-  function collectBounds(points) {
-    for (const [lng, lat] of points) {
-      state.minLng = Math.min(state.minLng, lng);
-      state.maxLng = Math.max(state.maxLng, lng);
-      state.minLat = Math.min(state.minLat, lat);
-      state.maxLat = Math.max(state.maxLat, lat);
+  function setLayerVisible(target, visible) {
+    if (!target) return;
+    if (Array.isArray(target)) {
+      target.forEach(item => item && item.setMap(visible ? map : null));
+    } else {
+      target.setMap(visible ? map : null);
     }
   }
 
-  function drawPolyline(points, color, width, dash = []) {
-    if (!points || points.length < 2) return;
-    ctx.save();
-    ctx.beginPath();
-    const [x0, y0] = pointToScreen(points[0]);
-    ctx.moveTo(x0, y0);
-    for (let i = 1; i < points.length; i += 1) {
-      const [x, y] = pointToScreen(points[i]);
-      ctx.lineTo(x, y);
-    }
-    ctx.setLineDash(dash);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-    ctx.restore();
+  function createInfoMarker(point, color) {
+    const marker = new AMap.Marker({
+      position: [point.lng, point.lat],
+      title: point.name,
+      label: {
+        content: `<div style="background:#fff;padding:2px 6px;border-radius:12px;border:1px solid ${color};color:${color};font-weight:bold;">${point.name}</div>`,
+        offset: new AMap.Pixel(0, -20)
+      }
+    });
+
+    marker.on('click', () => {
+      const info = new AMap.InfoWindow({
+        offset: new AMap.Pixel(0, -22),
+        content: `<div style="padding:6px 10px"><strong>${point.name}</strong><br>${point.desc || ''}</div>`
+      });
+      info.open(map, [point.lng, point.lat]);
+    });
+
+    return marker;
   }
 
-  function drawMarker(point, color, radius, label) {
-    const [x, y] = pointToScreen(point);
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  async function loadAllRoutes(mapData) {
+    const fetchRoute = async (points) => {
+      const list = points.map(([lng, lat]) => `${lng},${lat}`);
+      const origin = list[0];
+      const destination = list[list.length - 1];
+      const waypoints = list.slice(1, -1).join('|');
+      const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
+      const data = await safeFetch(url);
+      if (!data.success || !Array.isArray(data.polyline)) throw new Error('路线返回异常');
+      return data.polyline;
+    };
 
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = '#222';
-    ctx.fillText(label, x + 8, y - 8);
-    ctx.restore();
-    state.pointsForHit.push({ x, y, radius: Math.max(radius, 8), label });
+    const [s101Path, westPath, g312Path] = await Promise.all([
+      fetchRoute(mapData.s101Waypoints),
+      fetchRoute(mapData.westRoute),
+      fetchRoute(mapData.g312Route)
+    ]);
+
+    layers.s101Polyline = new AMap.Polyline({ path: s101Path, strokeColor: '#ff6b00', strokeWeight: 5, zIndex: 80 });
+    layers.westPolyline = new AMap.Polyline({ path: westPath, strokeColor: '#2e7d32', strokeWeight: 4, zIndex: 70 });
+    layers.g312Polyline = new AMap.Polyline({ path: g312Path, strokeColor: '#1976d2', strokeWeight: 4, zIndex: 65 });
+
+    layers.s101Polyline.setMap(map);
+    layers.westPolyline.setMap(map);
+    layers.g312Polyline.setMap(map);
   }
 
-  function centerPointOnCanvas(point) {
-    if (!point) return;
-    const [lng, lat] = point;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const xRatio = (lng - state.minLng) / Math.max(1e-6, state.maxLng - state.minLng);
-    const yRatio = (lat - state.minLat) / Math.max(1e-6, state.maxLat - state.minLat);
-    state.offsetX = w / 2 - xRatio * w * state.zoom;
-    state.offsetY = h / 2 - (1 - yRatio) * h * state.zoom;
-  }
+  function loadStaticLayers(mapData) {
+    const closurePath = mapData.closurePoints.map(p => [p.lng, p.lat]);
+    layers.closureLine = new AMap.Polyline({
+      path: closurePath,
+      strokeColor: '#d32f2f',
+      strokeWeight: 4,
+      strokeStyle: 'dashed',
+      zIndex: 90
+    });
+    layers.closureLine.setMap(map);
 
-  function fitView() {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const pad = 40;
-    const worldW = Math.max(1e-6, state.maxLng - state.minLng);
-    const worldH = Math.max(1e-6, state.maxLat - state.minLat);
-    const scaleX = (w - pad * 2) / w;
-    const scaleY = (h - pad * 2) / h;
-    state.zoom = Math.max(0.5, Math.min(4, Math.min(scaleX, scaleY)));
-    centerPointOnCanvas([(state.minLng + state.maxLng) / 2, (state.minLat + state.maxLat) / 2]);
-  }
+    layers.closureMarkers = mapData.closurePoints.map(p => createInfoMarker(p, '#d32f2f'));
+    layers.scenicMarkers = mapData.scenicPoints.map(p => createInfoMarker(p, '#ff9800'));
 
-  function findHitPoint(x, y) {
-    for (let i = state.pointsForHit.length - 1; i >= 0; i -= 1) {
-      const p = state.pointsForHit[i];
-      const dx = x - p.x;
-      const dy = y - p.y;
-      if (Math.sqrt(dx * dx + dy * dy) <= p.radius) return p;
-    }
-    return null;
-  }
-
-  function draw() {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
-
-    // 轻量网格
-    ctx.save();
-    ctx.strokeStyle = '#eceff2';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < w; x += 50) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-    for (let y = 0; y < h; y += 50) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    state.pointsForHit = [];
-    if (!state.data) return;
-
-    if (state.visible.s101) drawPolyline(state.s101Route, '#FF6B00', 5);
-    if (state.visible.west) drawPolyline(state.westRoute, '#2e7d32', 4);
-    if (state.visible.g312) drawPolyline(state.g312Route, '#1976d2', 4);
-
-    if (state.visible.closure) {
-      const closureLine = state.data.closurePoints.map(p => [p.lng, p.lat]);
-      drawPolyline(closureLine, '#d32f2f', 4, [8, 6]);
-      state.data.closurePoints.forEach(p => drawMarker([p.lng, p.lat], '#d32f2f', 6, p.name));
-    }
-
-    if (state.visible.scenic) {
-      state.data.scenicPoints.forEach(p => drawMarker([p.lng, p.lat], '#ff9800', 5, p.name));
-    }
-
-    if (state.userPoint) drawMarker(state.userPoint, '#1976d2', 6, '我的位置');
-    if (state.queryPoint) drawMarker(state.queryPoint, '#673ab7', 6, '地址定位');
-  }
-
-  async function fetchRoute(points, label) {
-    const list = points.map(([lng, lat]) => `${lng},${lat}`);
-    const origin = list[0];
-    const destination = list[list.length - 1];
-    const waypoints = list.slice(1, -1).join('|');
-    const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
-    setStatus(`加载${label}路线...`);
-    const data = await safeFetch(url);
-    if (!data.success) throw new Error(data.message || `${label}路线请求失败`);
-    return data.polyline;
-  }
-
-  async function initialize() {
-    try {
-      setStatus('加载地图基础数据...');
-      const mapData = await safeFetch(`${API_BASE}/api/map-data`);
-      state.data = mapData;
-
-      // 计算边界
-      state.minLng = Number.POSITIVE_INFINITY;
-      state.maxLng = Number.NEGATIVE_INFINITY;
-      state.minLat = Number.POSITIVE_INFINITY;
-      state.maxLat = Number.NEGATIVE_INFINITY;
-      collectBounds(mapData.westRoute);
-      collectBounds(mapData.g312Route);
-      collectBounds(mapData.s101Waypoints);
-      collectBounds(mapData.closurePoints.map(p => [p.lng, p.lat]));
-      collectBounds(mapData.scenicPoints.map(p => [p.lng, p.lat]));
-
-      const s101 = await fetchRoute(mapData.s101Waypoints, 'S101');
-      const west = await fetchRoute(mapData.westRoute, '西部绕行');
-      const g312 = await fetchRoute(mapData.g312Route, 'G312');
-
-      state.s101Route = s101;
-      state.westRoute = west;
-      state.g312Route = g312;
-
-      fitView();
-      setStatus('加载完成');
-      draw();
-    } catch (error) {
-      setStatus(`加载失败: ${error.message}`);
-      console.error('前端初始化失败:', error);
-    }
+    layers.closureMarkers.forEach(m => m.setMap(map));
+    layers.scenicMarkers.forEach(m => m.setMap(map));
   }
 
   function bindControls() {
-    const btnMap = {
-      toggleS101: 's101',
-      toggleClosure: 'closure',
-      toggleWest: 'west',
-      toggleG312: 'g312',
-      toggleScenic: 'scenic'
+    const mapping = {
+      toggleS101: ['s101', 's101Polyline'],
+      toggleClosure: ['closure', ['closureLine', 'closureMarkers']],
+      toggleWest: ['west', 'westPolyline'],
+      toggleG312: ['g312', 'g312Polyline'],
+      toggleScenic: ['scenic', 'scenicMarkers']
     };
 
-    Object.entries(btnMap).forEach(([id, key]) => {
+    Object.entries(mapping).forEach(([id, [key, targetKey]]) => {
       const btn = document.getElementById(id);
       btn.addEventListener('click', () => {
-        state.visible[key] = !state.visible[key];
-        btn.classList.toggle('active', state.visible[key]);
-        draw();
+        visibility[key] = !visibility[key];
+        btn.classList.toggle('active', visibility[key]);
+
+        if (Array.isArray(targetKey)) {
+          targetKey.forEach(k => setLayerVisible(layers[k], visibility[key]));
+        } else {
+          setLayerVisible(layers[targetKey], visibility[key]);
+        }
       });
     });
 
     document.getElementById('locateBtn').addEventListener('click', () => {
-      if (!navigator.geolocation) {
-        alert('浏览器不支持定位');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          state.userPoint = [pos.coords.longitude, pos.coords.latitude];
-          centerPointOnCanvas(state.userPoint);
-          draw();
-        },
-        () => alert('定位失败'),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
+      AMap.plugin('AMap.Geolocation', () => {
+        const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000, showButton: false });
+        geolocation.getCurrentPosition((status, result) => {
+          if (status !== 'complete') {
+            alert('定位失败');
+            return;
+          }
+          const pos = [result.position.lng, result.position.lat];
+          if (userMarker) userMarker.setMap(null);
+          userMarker = new AMap.Marker({ position: pos, label: { content: '我的位置', offset: new AMap.Pixel(0, -22) } });
+          userMarker.setMap(map);
+          map.setCenter(pos);
+          map.setZoom(11);
+        });
+      });
     });
-
-    document.getElementById('searchBtn').addEventListener('click', async () => {
-      const address = document.getElementById('addressInput').value.trim();
-      if (!address) return;
-      try {
-        setStatus('地址解析中...');
-        const data = await safeFetch(`${API_BASE}/api/geocode?address=${encodeURIComponent(address)}`);
-        if (!data.success) throw new Error(data.message || '地址解析失败');
-        state.queryPoint = data.location;
-        centerPointOnCanvas(state.queryPoint);
-        setStatus(`地址定位成功: ${address}`);
-        draw();
-      } catch (error) {
-        setStatus(`地址解析失败: ${error.message}`);
-      }
-    });
-
-    // 画布缩放和平移
-    canvas.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      const delta = event.deltaY > 0 ? -0.1 : 0.1;
-      state.zoom = Math.min(4, Math.max(0.5, state.zoom + delta));
-      draw();
-    }, { passive: false });
-
-    canvas.addEventListener('mousedown', (event) => {
-      state.isDragging = true;
-      state.dragStart = [event.clientX, event.clientY];
-      canvas.classList.add('dragging');
-    });
-
-    window.addEventListener('mouseup', () => {
-      state.isDragging = false;
-      state.dragStart = null;
-      canvas.classList.remove('dragging');
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      if (!state.isDragging || !state.dragStart) return;
-      const dx = event.clientX - state.dragStart[0];
-      const dy = event.clientY - state.dragStart[1];
-      state.offsetX += dx;
-      state.offsetY += dy;
-      state.dragStart = [event.clientX, event.clientY];
-      draw();
-    });
-
-    canvas.addEventListener('click', (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      const hit = findHitPoint(x, y);
-      if (hit) {
-        alert(hit.label);
-      }
-    });
-
-    window.addEventListener('resize', resizeCanvas);
   }
 
-  bindControls();
-  resizeCanvas();
-  initialize();
+  async function init() {
+    if (typeof AMap === 'undefined') {
+      document.getElementById('map').innerHTML = '<div style="padding:40px;color:red;">高德 JS API 加载失败，请检查 JS Key 与 securityJsCode。</div>';
+      return;
+    }
+
+    map = new AMap.Map('map', {
+      center: [86.92, 43.92],
+      zoom: 9,
+      resizeEnable: true,
+      viewMode: '2D'
+    });
+
+    try {
+      const mapData = await safeFetch(`${API_BASE}/api/map-data`);
+      loadStaticLayers(mapData);
+      await loadAllRoutes(mapData);
+      map.setFitView([
+        layers.s101Polyline,
+        layers.westPolyline,
+        layers.g312Polyline,
+        layers.closureLine,
+        ...layers.closureMarkers,
+        ...layers.scenicMarkers
+      ]);
+      bindControls();
+    } catch (error) {
+      console.error('初始化失败:', error);
+      alert(`加载失败：${error.message}`);
+    }
+  }
+
+  init();
 })();
 </script>
 </body>
