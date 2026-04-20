@@ -1,552 +1,394 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <meta charset="utf-8">
-    <title>省道101线绕行图 - 真实道路路线（高德地图路径规划版）</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: "微软雅黑", "Segoe UI", "Helvetica Neue", sans-serif;
-            background: #2c3e2f;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .map-container {
-            width: 1300px;
-            max-width: 100%;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-        .map-title {
-            background: #1e3a2f;
-            color: white;
-            padding: 15px 20px;
-        }
-        .map-title h1 { font-size: 1.3rem; margin-bottom: 5px; }
-        .map-title p { font-size: 0.85rem; opacity: 0.85; }
-        #map {
-            width: 100%;
-            height: 550px;
-        }
-        .control-bar {
-            background: #f8f5f0;
-            padding: 12px 20px;
-            border-top: 1px solid #ddd;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: center;
-        }
-        .control-btn {
-            background: #fff;
-            border: 2px solid #ccc;
-            border-radius: 40px;
-            padding: 6px 18px;
-            font-size: 0.85rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .control-btn.active {
-            background: #1e3a2f;
-            border-color: #1e3a2f;
-            color: white;
-        }
-        .control-btn[data-type="closure"] { border-left-color: #d32f2f; border-left-width: 6px; }
-        .control-btn[data-type="west"] { border-left-color: #2e7d32; border-left-width: 6px; }
-        .control-btn[data-type="g312"] { border-left-color: #1976d2; border-left-width: 6px; }
-        .control-btn[data-type="scenic"] { border-left-color: #ff9800; border-left-width: 6px; }
-        .locate-btn {
-            background: #4caf50;
-            border-color: #2e7d32;
-            color: white;
-            margin-left: auto;
-        }
-        .legend {
-            padding: 12px 20px;
-            background: #fffaf5;
-            border-top: 1px solid #eee;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            font-size: 0.75rem;
-        }
-        .legend-item { display: flex; align-items: center; gap: 8px; }
-        .legend-color { width: 24px; height: 4px; border-radius: 3px; }
-        .legend-color.marker { width: 12px; height: 12px; border-radius: 50%; }
-        .legend-color.red { background: #d32f2f; }
-        .legend-color.green { background: #2e7d32; }
-        .legend-color.blue { background: #1976d2; }
-        .legend-color.orange { background: #ff9800; }
-        .info-footer {
-            background: #fff9f0;
-            padding: 8px 20px;
-            font-size: 0.7rem;
-            color: #666;
-            text-align: center;
-        }
-        @media (max-width: 700px) {
-            .control-btn { padding: 4px 12px; font-size: 0.7rem; }
-            .legend { gap: 12px; }
-            .locate-btn { margin-left: 0; }
-        }
-    </style>
-    <!-- ==================== 安全密钥配置 ==================== -->
-    <script type="text/javascript">
-        window._AMapSecurityConfig = {
-            securityJsCode: "YOUR_SECURITY_JS_CODE"   // ⬅️ 请替换为你的安全密钥
-        };
-    </script>
-    <!-- 高德地图 JS API（请替换 YOUR_AMAP_KEY 为你的 Key） -->
-    <script src="https://webapi.amap.com/maps?v=2.0&key=YOUR_AMAP_KEY"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S101 路线图（前后端分离 / Canvas）</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "微软雅黑", "Segoe UI", sans-serif; background: #2c3e2f; min-height: 100vh; padding: 20px; }
+    .map-container { max-width: 1300px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .map-title { background: #1e3a2f; color: #fff; padding: 14px 20px; }
+    .map-title h1 { font-size: 1.25rem; margin-bottom: 4px; }
+    .map-title p { opacity: .85; font-size: .85rem; }
+    #mapWrap { position: relative; width: 100%; height: 560px; background: #f7f8fa; }
+    #mapCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+    #mapCanvas.dragging { cursor: grabbing; }
+    .status { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; color: #333; }
+    .control-bar { background: #f8f5f0; border-top: 1px solid #ddd; padding: 12px 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .control-btn { border: 2px solid #ccc; background: #fff; border-radius: 20px; padding: 6px 12px; cursor: pointer; font-size: .85rem; font-weight: bold; }
+    .control-btn.active { background: #1e3a2f; border-color: #1e3a2f; color: #fff; }
+    .control-btn[data-type="closure"] { border-left: 6px solid #d32f2f; }
+    .control-btn[data-type="west"] { border-left: 6px solid #2e7d32; }
+    .control-btn[data-type="g312"] { border-left: 6px solid #1976d2; }
+    .control-btn[data-type="scenic"] { border-left: 6px solid #ff9800; }
+    .locate-btn { margin-left: auto; background: #4caf50; border-color: #2e7d32; color: #fff; }
+    .search-box { display: flex; gap: 8px; }
+    .search-box input { border: 1px solid #ccc; border-radius: 8px; padding: 6px 10px; min-width: 220px; }
+    .legend { padding: 10px 18px; background: #fffaf5; border-top: 1px solid #eee; display: flex; flex-wrap: wrap; gap: 16px; font-size: .75rem; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-color { width: 20px; height: 4px; border-radius: 3px; }
+    .legend-color.marker { width: 10px; height: 10px; border-radius: 50%; }
+    .red { background: #d32f2f; } .green { background: #2e7d32; } .blue { background: #1976d2; } .orange { background: #ff9800; }
+    .info-footer { background: #fff9f0; color: #666; text-align: center; padding: 8px 16px; font-size: .7rem; }
+  </style>
 </head>
 <body>
 <div class="map-container">
-    <div class="map-title">
-        <h1>🚧 S101线封闭施工绕行图 · 百里丹霞风景道景点（真实道路路线）</h1>
-        <p>封闭路段：S101线 K21+730 ～ K64+300（双向封闭）｜S101主线通过高德路径规划服务生成真实道路路线</p>
-    </div>
-    <div id="map"></div>
+  <div class="map-title">
+    <h1>🚧 S101线封闭施工绕行图（Canvas 绘制）</h1>
+    <p>前端仅请求本地接口：/api/map-data、/api/route、/api/geocode</p>
+  </div>
 
-    <div class="control-bar">
-        <div class="control-btn active" data-type="s101" id="toggleS101">🛣️ S101主线（真实道路）</div>
-        <div class="control-btn active" data-type="closure" id="toggleClosure">🚫 封闭路段标注</div>
-        <div class="control-btn active" data-type="west" id="toggleWest">🟢 西部绕行路线</div>
-        <div class="control-btn active" data-type="g312" id="toggleG312">🔵 312国道绕行</div>
-        <div class="control-btn active" data-type="scenic" id="toggleScenic">🏞️ 景点标记</div>
-        <div class="control-btn locate-btn" id="locateBtn">📍 我的位置</div>
-    </div>
+  <div id="mapWrap">
+    <canvas id="mapCanvas"></canvas>
+    <div class="status" id="status">初始化中...</div>
+  </div>
 
-    <div class="legend">
-        <div class="legend-item"><div class="legend-color red"></div><span>🚫 封闭施工段标注</span></div>
-        <div class="legend-item"><div class="legend-color green"></div><span>🟢 西部绕行路线</span></div>
-        <div class="legend-item"><div class="legend-color blue"></div><span>🔵 312国道绕行路线</span></div>
-        <div class="legend-item"><div class="legend-color marker orange"></div><span>🏞️ S101沿线景点 (点击查看详情)</span></div>
-        <div class="legend-item"><div class="legend-color marker red"></div><span>📍 封闭起止点 / 关键路口</span></div>
-        <div class="legend-item"><div class="legend-color marker blue"></div><span>🔵 我的位置 (定位后显示)</span></div>
+  <div class="control-bar">
+    <button class="control-btn active" data-type="s101" id="toggleS101">🛣️ S101主线</button>
+    <button class="control-btn active" data-type="closure" id="toggleClosure">🚫 封闭路段</button>
+    <button class="control-btn active" data-type="west" id="toggleWest">🟢 西部绕行</button>
+    <button class="control-btn active" data-type="g312" id="toggleG312">🔵 312国道绕行</button>
+    <button class="control-btn active" data-type="scenic" id="toggleScenic">🏞️ 景点</button>
+    <div class="search-box">
+      <input id="addressInput" placeholder="输入地址并定位（调用 /api/geocode）" />
+      <button class="control-btn" id="searchBtn">📍 地址定位</button>
     </div>
-    <div class="info-footer">
-        ⚠️ S101主线路线通过高德地图驾车路径规划服务生成，沿真实道路行驶｜所有点位名称已直接显示在地图上｜点击“我的位置”可定位到您当前所在位置
-    </div>
+    <button class="control-btn locate-btn" id="locateBtn">📌 我的位置</button>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color red"></div><span>封闭施工段</span></div>
+    <div class="legend-item"><div class="legend-color green"></div><span>西部绕行</span></div>
+    <div class="legend-item"><div class="legend-color blue"></div><span>G312绕行</span></div>
+    <div class="legend-item"><div class="legend-color marker orange"></div><span>景点</span></div>
+    <div class="legend-item"><div class="legend-color marker blue"></div><span>定位点</span></div>
+  </div>
+
+  <div class="info-footer">鼠标滚轮缩放，拖拽平移；点击点位查看名称。</div>
 </div>
 
 <script>
-    // 全局变量
-    let map;
-    let s101Polyline = null;      // S101真实道路折线
-    let westPolyline = null;
-    let g312Polyline = null;
-    let closureMarkers = [], closureLines = [];
-    let westMarkers = [], westLines = [];
-    let g312Markers = [], g312Lines = [];
-    let scenicMarkers = [];
-    let routeRequestCount = 0;
+(() => {
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
 
-    // 定义点位数据
-    const closurePoints = [
-        { name: 'K21+730 起点', lng: 87.185, lat: 43.885, desc: '封闭段起点', color: '#d32f2f' },
-        { name: 'K64+300 终点', lng: 86.637, lat: 43.910, desc: '封闭段终点', color: '#d32f2f' }
-    ];
+  const state = {
+    data: null,
+    s101Route: [],
+    westRoute: [],
+    g312Route: [],
+    userPoint: null,
+    queryPoint: null,
+    visible: { s101: true, closure: true, west: true, g312: true, scenic: true },
+    zoom: 1,
+    minLng: 0,
+    minLat: 0,
+    maxLng: 0,
+    maxLat: 0,
+    offsetX: 0,
+    offsetY: 0,
+    isDragging: false,
+    dragStart: null,
+    hoverLabel: '',
+    pointsForHit: []
+  };
 
-    const westPoints = [
-        { name: '昌吉市区起点', lng: 87.278, lat: 44.009, desc: '乌伊路与世纪大道交叉口，向南出发', color: '#2e7d32' },
-        { name: '三工镇', lng: 87.207, lat: 43.930, desc: '向南行驶经过，转入X120县道', color: '#2e7d32' },
-        { name: 'X120县道', lng: 87.18, lat: 43.92, desc: '向西转入省道335线', color: '#2e7d32' },
-        { name: 'X146线岔路口', lng: 86.82, lat: 43.97, desc: '呼图壁县境内，转入X146线', color: '#2e7d32' },
-        { name: '西沟村 Y705乡道', lng: 86.68, lat: 43.89, desc: '经西沟村乡道705线', color: '#2e7d32' },
-        { name: '重回S101线', lng: 86.637, lat: 43.91, desc: '进入百里丹霞风景道', color: '#2e7d32' }
-    ];
+  function setStatus(msg) {
+    statusEl.textContent = msg;
+  }
 
-    const g312Points = [
-        { name: '大丰镇', lng: 86.600, lat: 44.182, desc: '沿G312国道至呼图壁县大丰镇', color: '#1976d2' },
-        { name: 'X146线入口', lng: 86.65, lat: 44.12, desc: '转入县道146线向南行驶', color: '#1976d2' },
-        { name: 'Y705乡道汇合点', lng: 86.68, lat: 43.89, desc: '与西部绕行路线汇合', color: '#1976d2' }
-    ];
+  function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
 
-    const westWaypoints = [
-        [87.278, 44.009], [87.207, 43.930], [87.18, 43.92],
-        [87.10, 43.93], [86.82, 43.97], [86.78, 43.92],
-        [86.68, 43.89], [86.637, 43.91]
-    ];
+  function pointToScreen(point) {
+    const [lng, lat] = point;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const xRatio = (lng - state.minLng) / Math.max(1e-6, state.maxLng - state.minLng);
+    const yRatio = (lat - state.minLat) / Math.max(1e-6, state.maxLat - state.minLat);
+    const px = xRatio * width * state.zoom + state.offsetX;
+    const py = (1 - yRatio) * height * state.zoom + state.offsetY;
+    return [px, py];
+  }
 
-    const g312Waypoints = [
-        [86.88, 44.18], [86.600, 44.182], [86.65, 44.12],
-        [86.70, 44.02], [86.68, 43.89], [86.637, 43.91]
-    ];
+  function collectBounds(points) {
+    for (const [lng, lat] of points) {
+      state.minLng = Math.min(state.minLng, lng);
+      state.maxLng = Math.max(state.maxLng, lng);
+      state.minLat = Math.min(state.minLat, lat);
+      state.maxLat = Math.max(state.maxLat, lat);
+    }
+  }
 
-    const scenicPoints = [
-        { name: '百里丹霞观景台', lng: 86.95, lat: 43.895, desc: '核心观景点，俯瞰连绵丹霞地貌', color: '#ff9800' },
-        { name: '康家石门子岩画', lng: 86.85, lat: 43.902, desc: '古代游牧民族岩画', color: '#ff9800' },
-        { name: '赤壁天湖', lng: 86.75, lat: 43.888, desc: '碧水映红崖，夏季避暑露营好去处', color: '#ff9800' },
-        { name: '锦绣丹霞台', lng: 86.90, lat: 43.898, desc: '视野开阔，适合拍摄日出和星空', color: '#ff9800' },
-        { name: '骆驼峰', lng: 86.80, lat: 43.893, desc: '象形石峰，徒步爱好者打卡点', color: '#ff9800' },
-        { name: '杏花谷口', lng: 87.05, lat: 43.890, desc: '春季杏花漫山', color: '#ff9800' },
-        { name: '百里丹霞风景道入口', lng: 87.10, lat: 43.92, desc: '风景道入口', color: '#ff9800' }
-    ];
+  function drawPolyline(points, color, width, dash = []) {
+    if (!points || points.length < 2) return;
+    ctx.save();
+    ctx.beginPath();
+    const [x0, y0] = pointToScreen(points[0]);
+    ctx.moveTo(x0, y0);
+    for (let i = 1; i < points.length; i += 1) {
+      const [x, y] = pointToScreen(points[i]);
+      ctx.lineTo(x, y);
+    }
+    ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
 
-    // S101关键途经点（用于路径规划，获取真实道路线）
-    // 根据公告，S101线从K0到K100+左右，选取沿途关键节点
-    const s101Waypoints = [
-        { lng: 87.26, lat: 43.40, name: 'S101起点（西山农牧场岔口）' },      // 乌鲁木齐起点
-        { lng: 87.185, lat: 43.885, name: 'K21+730起点' },                    // 封闭段起点
-        { lng: 87.10, lat: 43.92, name: '百里丹霞入口' },                     // 百里丹霞风景道入口
-        { lng: 86.95, lat: 43.895, name: '百里丹霞观景台' },                  // 核心观景台
-        { lng: 86.85, lat: 43.902, name: '康家石门子岩画' },                  // 岩画景点
-        { lng: 86.80, lat: 43.893, name: '骆驼峰' },                          // 景点
-        { lng: 86.75, lat: 43.888, name: '赤壁天湖' },                        // 天湖景点
-        { lng: 86.68, lat: 43.89, name: '西沟村Y705交汇点' },                 // 绕行交汇点
-        { lng: 86.637, lat: 43.910, name: 'K64+300终点' },                    // 封闭段终点
-        { lng: 85.97, lat: 43.94, name: '肯斯瓦特水库（S101终点附近）' }       // 景点终点
-    ];
+  function drawMarker(point, color, radius, label) {
+    const [x, y] = pointToScreen(point);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
-    // 辅助函数：创建自定义圆点标记
-    function createPointMarker(lng, lat, name, desc, colorHex, offsetY = -22) {
-        const markerContent = document.createElement('div');
-        markerContent.style.width = '14px';
-        markerContent.style.height = '14px';
-        markerContent.style.backgroundColor = colorHex;
-        markerContent.style.borderRadius = '50%';
-        markerContent.style.border = '2px solid white';
-        markerContent.style.boxShadow = '0 1px 3px rgba(0,0,0,0.3)';
-        markerContent.style.cursor = 'pointer';
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText(label, x + 8, y - 8);
+    ctx.restore();
+    state.pointsForHit.push({ x, y, radius: Math.max(radius, 8), label });
+  }
 
-        const marker = new AMap.Marker({
-            position: [lng, lat],
-            content: markerContent,
-            anchor: 'center',
-            offset: new AMap.Pixel(0, 0)
-        });
+  function centerPointOnCanvas(point) {
+    if (!point) return;
+    const [lng, lat] = point;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const xRatio = (lng - state.minLng) / Math.max(1e-6, state.maxLng - state.minLng);
+    const yRatio = (lat - state.minLat) / Math.max(1e-6, state.maxLat - state.minLat);
+    state.offsetX = w / 2 - xRatio * w * state.zoom;
+    state.offsetY = h / 2 - (1 - yRatio) * h * state.zoom;
+  }
 
-        marker.setLabel({
-            content: `<div style="background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 12px; font-size: 12px; color: ${colorHex}; font-weight: bold; border: 1px solid ${colorHex}; white-space: nowrap;">${name}</div>`,
-            offset: new AMap.Pixel(0, offsetY)
-        });
+  function fitView() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const pad = 40;
+    const worldW = Math.max(1e-6, state.maxLng - state.minLng);
+    const worldH = Math.max(1e-6, state.maxLat - state.minLat);
+    const scaleX = (w - pad * 2) / w;
+    const scaleY = (h - pad * 2) / h;
+    state.zoom = Math.max(0.5, Math.min(4, Math.min(scaleX, scaleY)));
+    centerPointOnCanvas([(state.minLng + state.maxLng) / 2, (state.minLat + state.maxLat) / 2]);
+  }
 
-        marker.on('click', () => {
-            const infoWindow = new AMap.InfoWindow({
-                content: `<div style="padding: 6px 12px;"><strong>${name}</strong><br>${desc}</div>`,
-                offset: new AMap.Pixel(0, -20)
-            });
-            infoWindow.open(map, [lng, lat]);
-        });
+  function findHitPoint(x, y) {
+    for (let i = state.pointsForHit.length - 1; i >= 0; i -= 1) {
+      const p = state.pointsForHit[i];
+      const dx = x - p.x;
+      const dy = y - p.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= p.radius) return p;
+    }
+    return null;
+  }
 
-        return marker;
+  function draw() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    // 轻量网格
+    ctx.save();
+    ctx.strokeStyle = '#eceff2';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    state.pointsForHit = [];
+    if (!state.data) return;
+
+    if (state.visible.s101) drawPolyline(state.s101Route, '#FF6B00', 5);
+    if (state.visible.west) drawPolyline(state.westRoute, '#2e7d32', 4);
+    if (state.visible.g312) drawPolyline(state.g312Route, '#1976d2', 4);
+
+    if (state.visible.closure) {
+      const closureLine = state.data.closurePoints.map(p => [p.lng, p.lat]);
+      drawPolyline(closureLine, '#d32f2f', 4, [8, 6]);
+      state.data.closurePoints.forEach(p => drawMarker([p.lng, p.lat], '#d32f2f', 6, p.name));
     }
 
-    function setLoading(isLoading, label) {
-        const mapDom = document.getElementById('map');
-        if (!mapDom) return;
-        mapDom.style.opacity = isLoading ? '0.75' : '1';
-        if (isLoading) {
-            routeRequestCount += 1;
-        } else {
-            routeRequestCount = Math.max(0, routeRequestCount - 1);
-        }
-        console.log(`[route] ${label} | loading=${routeRequestCount}`);
+    if (state.visible.scenic) {
+      state.data.scenicPoints.forEach(p => drawMarker([p.lng, p.lat], '#ff9800', 5, p.name));
     }
 
-    async function fetchRouteViaBackend(pointList, routeName) {
-        const formatted = pointList.map(([lng, lat]) => `${lng},${lat}`);
-        const origin = formatted[0];
-        const destination = formatted[formatted.length - 1];
-        const waypoints = formatted.slice(1, -1).join('|');
-        const query = new URLSearchParams({ origin, destination });
-        if (waypoints) query.set('waypoints', waypoints);
+    if (state.userPoint) drawMarker(state.userPoint, '#1976d2', 6, '我的位置');
+    if (state.queryPoint) drawMarker(state.queryPoint, '#673ab7', 6, '地址定位');
+  }
 
-        setLoading(true, `${routeName} 开始请求`);
-        try {
-            const response = await fetch(`/api/route?${query.toString()}`);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const data = await response.json();
-            if (!data.success || !Array.isArray(data.polyline) || data.polyline.length === 0) {
-                throw new Error(data.message || '后端未返回有效路线');
-            }
-            console.log(`[route] ${routeName} 请求成功，点数=${data.polyline.length}`);
-            return data.polyline;
-        } finally {
-            setLoading(false, `${routeName} 请求结束`);
-        }
+  async function fetchRoute(points, label) {
+    const list = points.map(([lng, lat]) => `${lng},${lat}`);
+    const origin = list[0];
+    const destination = list[list.length - 1];
+    const waypoints = list.slice(1, -1).join('|');
+    const url = `/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
+    setStatus(`加载${label}路线...`);
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!resp.ok || !data.success) throw new Error(data.message || `${label}路线请求失败`);
+    return data.polyline;
+  }
+
+  async function initialize() {
+    try {
+      setStatus('加载地图基础数据...');
+      const baseResp = await fetch('/api/map-data');
+      const mapData = await baseResp.json();
+      state.data = mapData;
+
+      // 计算边界
+      state.minLng = Number.POSITIVE_INFINITY;
+      state.maxLng = Number.NEGATIVE_INFINITY;
+      state.minLat = Number.POSITIVE_INFINITY;
+      state.maxLat = Number.NEGATIVE_INFINITY;
+      collectBounds(mapData.westRoute);
+      collectBounds(mapData.g312Route);
+      collectBounds(mapData.s101Waypoints);
+      collectBounds(mapData.closurePoints.map(p => [p.lng, p.lat]));
+      collectBounds(mapData.scenicPoints.map(p => [p.lng, p.lat]));
+
+      const s101 = await fetchRoute(mapData.s101Waypoints, 'S101');
+      const west = await fetchRoute(mapData.westRoute, '西部绕行');
+      const g312 = await fetchRoute(mapData.g312Route, 'G312');
+
+      state.s101Route = s101;
+      state.westRoute = west;
+      state.g312Route = g312;
+
+      fitView();
+      setStatus('加载完成');
+      draw();
+    } catch (error) {
+      setStatus(`加载失败: ${error.message}`);
+      console.error('前端初始化失败:', error);
     }
+  }
 
-    function fitAllRoutes() {
-        const overlays = [s101Polyline, westPolyline, g312Polyline].filter(Boolean);
-        if (overlays.length > 0) {
-            map.setFitView(overlays, false, [40, 40, 40, 40]);
-        }
-    }
-
-    async function loadS101RealRoute() {
-        const points = s101Waypoints.map(w => [w.lng, w.lat]);
-        const formatted = points.map(([lng, lat]) => `${lng},${lat}`);
-        const origin = formatted[0];
-        const destination = formatted[formatted.length - 1];
-        const waypoints = formatted.slice(1, -1).join('|');
-        const routeUrl = `/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
-
-        console.log("请求本地路线接口:", origin, destination);
-        setLoading(true, 'S101 开始请求');
-        try {
-            const response = await fetch(routeUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const data = await response.json();
-            if (!data.success || !Array.isArray(data.polyline) || data.polyline.length === 0) {
-                throw new Error(data.message || '后端未返回有效路线');
-            }
-            console.log("后端返回路线点数量:", data.polyline.length);
-            const polylinePoints = data.polyline;
-            if (s101Polyline) s101Polyline.setMap(null);
-            s101Polyline = new AMap.Polyline({
-                path: polylinePoints,
-                strokeColor: '#FF6B00',
-                strokeWeight: 5,
-                strokeOpacity: 0.9,
-                strokeStyle: 'solid',
-                zIndex: 60
-            });
-            s101Polyline.setMap(map);
-            fitAllRoutes();
-        } catch (error) {
-            console.error("本地路线接口失败:", error);
-            drawFallbackLine();
-        } finally {
-            setLoading(false, 'S101 请求结束');
-        }
-    }
-
-    async function loadWestRouteReal() {
-        try {
-            const polylinePoints = await fetchRouteViaBackend(westWaypoints, '西部绕行');
-            if (westPolyline) westPolyline.setMap(null);
-            westPolyline = new AMap.Polyline({
-                path: polylinePoints,
-                strokeColor: '#2e7d32',
-                strokeWeight: 4,
-                strokeOpacity: 0.9,
-                strokeStyle: 'solid',
-                zIndex: 50
-            });
-            westPolyline.setMap(map);
-            westLines = [westPolyline];
-            fitAllRoutes();
-        } catch (error) {
-            console.error('西部绕行路径规划请求失败:', error);
-        }
-    }
-
-    async function loadG312RouteReal() {
-        try {
-            const polylinePoints = await fetchRouteViaBackend(g312Waypoints, 'G312绕行');
-            if (g312Polyline) g312Polyline.setMap(null);
-            g312Polyline = new AMap.Polyline({
-                path: polylinePoints,
-                strokeColor: '#1976d2',
-                strokeWeight: 4,
-                strokeOpacity: 0.85,
-                strokeStyle: 'solid',
-                zIndex: 45
-            });
-            g312Polyline.setMap(map);
-            g312Lines = [g312Polyline];
-            fitAllRoutes();
-        } catch (error) {
-            console.error('G312路径规划请求失败:', error);
-        }
-    }
-
-    // 降级方案：直接连接关键节点
-    function drawFallbackLine() {
-        const fallbackPath = s101Waypoints.map(w => [w.lng, w.lat]);
-        s101Polyline = new AMap.Polyline({
-            path: fallbackPath,
-            strokeColor: '#FF6B00',
-            strokeWeight: 5,
-            strokeOpacity: 0.9,
-            strokeStyle: 'dashed',
-            zIndex: 60
-        });
-        s101Polyline.setMap(map);
-        fitAllRoutes();
-    }
-
-    // 初始化地图
-    window.initAMap = function() {
-        if (typeof AMap === 'undefined') {
-            document.getElementById('map').innerHTML = '<div style="text-align:center;padding:50px;color:red;">高德地图 API 加载失败，请检查网络或 Key 是否正确。</div>';
-            return;
-        }
-
-        map = new AMap.Map('map', {
-            center: [86.92, 43.92],
-            zoom: 9,
-            viewMode: '2D',
-            resizeEnable: true,
-            mapStyle: 'amap://styles/normal'
-        });
-
-        // 加载真实路线（通过后端代理）
-        loadS101RealRoute();
-        loadWestRouteReal();
-        loadG312RouteReal();
-
-        // 创建封闭段标注（虚线标注封闭区域）
-        const closurePolyline = new AMap.Polyline({
-            path: [[87.185, 43.885], [86.637, 43.910]],
-            strokeColor: '#d32f2f',
-            strokeWeight: 4,
-            strokeOpacity: 0.85,
-            strokeStyle: 'dashed'
-        });
-        closurePolyline.setMap(map);
-        closureLines.push(closurePolyline);
-
-        const closureLabel = new AMap.Marker({
-            position: [86.92, 43.90],
-            content: '<div style="background: #d32f2f; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold;">🚫 双向封闭施工 K21+730 ~ K64+300</div>',
-            anchor: 'bottom-center'
-        });
-        closureLabel.setMap(map);
-        closureLines.push(closureLabel);
-        closurePoints.forEach(p => {
-            const marker = createPointMarker(p.lng, p.lat, p.name, p.desc, p.color, -22);
-            marker.setMap(map);
-            closureMarkers.push(marker);
-        });
-
-        westPoints.forEach(p => {
-            const marker = createPointMarker(p.lng, p.lat, p.name, p.desc, p.color, -22);
-            marker.setMap(map);
-            westMarkers.push(marker);
-        });
-
-        g312Points.forEach(p => {
-            const marker = createPointMarker(p.lng, p.lat, p.name, p.desc, p.color, -22);
-            marker.setMap(map);
-            g312Markers.push(marker);
-        });
-
-        // 景点标记
-        scenicPoints.forEach(p => {
-            const marker = createPointMarker(p.lng, p.lat, p.name, p.desc, p.color, -24);
-            marker.setMap(map);
-            scenicMarkers.push(marker);
-        });
-
-        // 图层控制
-        let s101Visible = true, closureVisible = true, westVisible = true, g312Visible = true, scenicVisible = true;
-        function setVisible(elements, visible) {
-            if (elements) {
-                if (Array.isArray(elements)) {
-                    elements.forEach(el => el.setMap(visible ? map : null));
-                } else {
-                    elements.setMap(visible ? map : null);
-                }
-            }
-        }
-
-        document.getElementById('toggleS101').onclick = () => {
-            s101Visible = !s101Visible;
-            setVisible(s101Polyline, s101Visible);
-            document.getElementById('toggleS101').classList.toggle('active', s101Visible);
-        };
-        document.getElementById('toggleClosure').onclick = () => {
-            closureVisible = !closureVisible;
-            setVisible(closureMarkers, closureVisible);
-            setVisible(closureLines, closureVisible);
-            document.getElementById('toggleClosure').classList.toggle('active', closureVisible);
-        };
-        document.getElementById('toggleWest').onclick = () => {
-            westVisible = !westVisible;
-            setVisible(westMarkers, westVisible);
-            setVisible(westLines, westVisible);
-            document.getElementById('toggleWest').classList.toggle('active', westVisible);
-        };
-        document.getElementById('toggleG312').onclick = () => {
-            g312Visible = !g312Visible;
-            setVisible(g312Markers, g312Visible);
-            setVisible(g312Lines, g312Visible);
-            document.getElementById('toggleG312').classList.toggle('active', g312Visible);
-        };
-        document.getElementById('toggleScenic').onclick = () => {
-            scenicVisible = !scenicVisible;
-            setVisible(scenicMarkers, scenicVisible);
-            document.getElementById('toggleScenic').classList.toggle('active', scenicVisible);
-        };
-
-        // 用户定位
-        let userMarker = null;
-        document.getElementById('locateBtn').onclick = () => {
-            AMap.plugin('AMap.Geolocation', () => {
-                const geolocation = new AMap.Geolocation({
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    showButton: false
-                });
-                geolocation.getCurrentPosition((status, result) => {
-                    if (status === 'complete') {
-                        const pos = [result.position.lng, result.position.lat];
-                        if (userMarker) userMarker.setMap(null);
-                        const userDiv = document.createElement('div');
-                        userDiv.style.width = '16px';
-                        userDiv.style.height = '16px';
-                        userDiv.style.backgroundColor = '#1976d2';
-                        userDiv.style.borderRadius = '50%';
-                        userDiv.style.border = '2px solid white';
-                        userDiv.style.boxShadow = '0 0 0 2px #1976d2';
-                        userMarker = new AMap.Marker({
-                            position: pos,
-                            content: userDiv,
-                            anchor: 'center'
-                        });
-                        userMarker.setLabel({
-                            content: '<div style="background: white; padding: 2px 6px; border-radius: 12px; font-size: 12px; color: #1976d2;">我的位置</div>',
-                            offset: new AMap.Pixel(0, -22)
-                        });
-                        userMarker.setMap(map);
-                        map.setCenter(pos);
-                        map.setZoom(12);
-                        new AMap.InfoWindow({
-                            content: '<div>📍 您当前所在位置</div>',
-                            offset: new AMap.Pixel(0, -20)
-                        }).open(map, pos);
-                    } else {
-                        alert('定位失败：' + result.message);
-                    }
-                });
-            });
-        };
-
-        // 自动调整视野
-        map.setFitView(
-            [
-                ...closurePoints.map(p => [p.lng, p.lat]),
-                ...westPoints.map(p => [p.lng, p.lat]),
-                ...g312Points.map(p => [p.lng, p.lat]),
-                ...scenicPoints.map(p => [p.lng, p.lat])
-            ],
-            false,
-            { padding: 40 }
-        );
+  function bindControls() {
+    const btnMap = {
+      toggleS101: 's101',
+      toggleClosure: 'closure',
+      toggleWest: 'west',
+      toggleG312: 'g312',
+      toggleScenic: 'scenic'
     };
 
-    if (typeof AMap !== 'undefined') {
-        window.initAMap();
-    } else {
-        window.addEventListener('load', function() {
-            if (typeof AMap !== 'undefined') window.initAMap();
-            else setTimeout(() => window.initAMap(), 500);
-        });
-    }
+    Object.entries(btnMap).forEach(([id, key]) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener('click', () => {
+        state.visible[key] = !state.visible[key];
+        btn.classList.toggle('active', state.visible[key]);
+        draw();
+      });
+    });
+
+    document.getElementById('locateBtn').addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        alert('浏览器不支持定位');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          state.userPoint = [pos.coords.longitude, pos.coords.latitude];
+          centerPointOnCanvas(state.userPoint);
+          draw();
+        },
+        () => alert('定位失败'),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+
+    document.getElementById('searchBtn').addEventListener('click', async () => {
+      const address = document.getElementById('addressInput').value.trim();
+      if (!address) return;
+      try {
+        setStatus('地址解析中...');
+        const resp = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.message || '地址解析失败');
+        state.queryPoint = data.location;
+        centerPointOnCanvas(state.queryPoint);
+        setStatus(`地址定位成功: ${address}`);
+        draw();
+      } catch (error) {
+        setStatus(`地址解析失败: ${error.message}`);
+      }
+    });
+
+    // 画布缩放和平移
+    canvas.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? -0.1 : 0.1;
+      state.zoom = Math.min(4, Math.max(0.5, state.zoom + delta));
+      draw();
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', (event) => {
+      state.isDragging = true;
+      state.dragStart = [event.clientX, event.clientY];
+      canvas.classList.add('dragging');
+    });
+
+    window.addEventListener('mouseup', () => {
+      state.isDragging = false;
+      state.dragStart = null;
+      canvas.classList.remove('dragging');
+    });
+
+    window.addEventListener('mousemove', (event) => {
+      if (!state.isDragging || !state.dragStart) return;
+      const dx = event.clientX - state.dragStart[0];
+      const dy = event.clientY - state.dragStart[1];
+      state.offsetX += dx;
+      state.offsetY += dy;
+      state.dragStart = [event.clientX, event.clientY];
+      draw();
+    });
+
+    canvas.addEventListener('click', (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const hit = findHitPoint(x, y);
+      if (hit) {
+        alert(hit.label);
+      }
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+  }
+
+  bindControls();
+  resizeCanvas();
+  initialize();
+})();
 </script>
 </body>
 </html>
