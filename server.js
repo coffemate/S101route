@@ -33,44 +33,31 @@ app.use((req, _res, next) => {
 });
 
 const routeCache = new Map();
+const geocodeCache = new Map();
 
-const closurePoints = [
-  { name: 'K21+730 起点', lng: 87.185, lat: 43.885, desc: '封闭段起点', color: '#d32f2f' },
-  { name: 'K64+300 终点', lng: 86.637, lat: 43.910, desc: '封闭段终点', color: '#d32f2f' }
-];
+const ROUTE_PLANS = {
+  s101: {
+    origin: '乌鲁木齐西山农牧场',
+    destination: '玛纳斯县',
+    waypoints: ['硫磺沟镇', '呼图壁县', '雀尔沟镇']
+  },
+  west: {
+    origin: '昌吉市',
+    destination: '雀尔沟镇',
+    waypoints: ['三工镇', 'S335', 'X146县道']
+  },
+  g312: {
+    origin: '昌吉市',
+    destination: '雀尔沟镇',
+    waypoints: ['G312', '大丰镇', 'X146县道']
+  }
+};
 
-const westRoute = [
-  [87.278, 44.009], [87.207, 43.930], [87.18, 43.92],
-  [87.10, 43.93], [86.82, 43.97], [86.78, 43.92],
-  [86.68, 43.89], [86.637, 43.91]
-];
-
-const g312Route = [
-  [86.88, 44.18], [86.600, 44.182], [86.65, 44.12],
-  [86.70, 44.02], [86.68, 43.89], [86.637, 43.91]
-];
-
-const scenicPoints = [
-  { name: '百里丹霞观景台', lng: 86.95, lat: 43.895, desc: '核心观景点，俯瞰连绵丹霞地貌', color: '#ff9800' },
-  { name: '康家石门子岩画', lng: 86.85, lat: 43.902, desc: '古代游牧民族岩画', color: '#ff9800' },
-  { name: '赤壁天湖', lng: 86.75, lat: 43.888, desc: '碧水映红崖，夏季避暑露营好去处', color: '#ff9800' },
-  { name: '锦绣丹霞台', lng: 86.90, lat: 43.898, desc: '视野开阔，适合拍摄日出和星空', color: '#ff9800' },
-  { name: '骆驼峰', lng: 86.80, lat: 43.893, desc: '象形石峰，徒步爱好者打卡点', color: '#ff9800' },
-  { name: '杏花谷口', lng: 87.05, lat: 43.890, desc: '春季杏花漫山', color: '#ff9800' },
-  { name: '百里丹霞风景道入口', lng: 87.10, lat: 43.92, desc: '风景道入口', color: '#ff9800' }
-];
-
-const s101Waypoints = [
-  [87.26, 43.40],
-  [87.185, 43.885],
-  [87.10, 43.92],
-  [86.95, 43.895],
-  [86.85, 43.902],
-  [86.80, 43.893],
-  [86.75, 43.888],
-  [86.68, 43.89],
-  [86.637, 43.910],
-  [85.97, 43.94]
+const SCENIC_SPOTS = [
+  { name: '百里丹霞观景台', desc: '百里丹霞风景带核心观景点' },
+  { name: '康家石门子岩画', desc: 'S101沿线人文历史景点' },
+  { name: '赤壁天湖', desc: '丹霞地貌湖泊景观点' },
+  { name: '锦绣丹霞', desc: '沿道路分布的丹霞观景点' }
 ];
 
 function convertCoordinates(lng, lat) {
@@ -104,15 +91,55 @@ function normalizePointList(points = []) {
   return points.map(([lng, lat]) => convertCoordinates(lng, lat)).filter(Boolean);
 }
 
-app.get('/api/map-data', (_req, res) => {
-  res.json({
-    closurePoints,
-    westRoute: normalizePointList(westRoute),
-    g312Route: normalizePointList(g312Route),
-    scenicPoints,
-    s101Waypoints: normalizePointList(s101Waypoints)
+function isLngLatText(v) {
+  return typeof v === 'string' && /^\s*-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?\s*$/.test(v);
+}
+
+async function geocodeAddress(address) {
+  if (geocodeCache.has(address)) return geocodeCache.get(address);
+  const response = await axios.get(AMAP_GEOCODE_API, {
+    params: { key: AMAP_WEB_KEY, address, output: 'json' },
+    timeout: 15000
   });
-  console.log('====== END ======');
+  const data = response.data;
+  if (!data || data.status !== '1' || !Array.isArray(data.geocodes) || !data.geocodes.length) {
+    throw new Error(`地理编码失败: ${address}`);
+  }
+  const [lng, lat] = String(data.geocodes[0].location || '').split(',');
+  const point = convertCoordinates(lng, lat);
+  if (!point) throw new Error(`地理编码结果无效: ${address}`);
+  geocodeCache.set(address, point);
+  return point;
+}
+
+async function resolveLocation(input) {
+  if (isLngLatText(input)) {
+    const [lng, lat] = input.split(',');
+    const point = convertCoordinates(lng, lat);
+    if (!point) throw new Error(`坐标无效: ${input}`);
+    return point;
+  }
+  return geocodeAddress(String(input).trim());
+}
+
+app.get('/api/map-data', (_req, res) => {
+  Promise.all(SCENIC_SPOTS.map(async (spot) => {
+    const [lng, lat] = await geocodeAddress(spot.name);
+    return { ...spot, lng, lat, color: '#ff9800' };
+  }))
+    .then((scenicPoints) => {
+      res.json({
+        routePlans: ROUTE_PLANS,
+        scenicPoints,
+        closureRangeKm: { start: 21, end: 64 }
+      });
+      console.log('====== END ======');
+    })
+    .catch((error) => {
+      console.error('接口错误:', error.message);
+      console.log('====== END ======');
+      res.status(500).json({ success: false, message: '地图基础数据生成失败' });
+    });
 });
 
 app.get('/api/route', async (req, res) => {
@@ -137,12 +164,22 @@ app.get('/api/route', async (req, res) => {
   }
 
   try {
+    const resolvedOrigin = await resolveLocation(origin);
+    const resolvedDestination = await resolveLocation(destination);
+    const waypointNames = String(waypoints).trim()
+      ? String(waypoints).split('|').map((x) => x.trim()).filter(Boolean)
+      : [];
+    const resolvedWaypoints = [];
+    for (const wp of waypointNames) {
+      resolvedWaypoints.push(await resolveLocation(wp));
+    }
+
     const response = await axios.get(AMAP_DRIVING_API, {
       params: {
         key: AMAP_WEB_KEY,
-        origin,
-        destination,
-        waypoints,
+        origin: `${resolvedOrigin[0]},${resolvedOrigin[1]}`,
+        destination: `${resolvedDestination[0]},${resolvedDestination[1]}`,
+        waypoints: resolvedWaypoints.map(([lng, lat]) => `${lng},${lat}`).join('|'),
         extensions: 'all',
         output: 'json'
       },
@@ -186,35 +223,13 @@ app.get('/api/geocode', async (req, res) => {
   }
 
   try {
-    const response = await axios.get(AMAP_GEOCODE_API, {
-      params: {
-        key: AMAP_WEB_KEY,
-        address,
-        output: 'json'
-      },
-      timeout: 15000
-    });
-
-    const data = response.data;
-    if (!data || data.status !== '1' || !Array.isArray(data.geocodes) || !data.geocodes.length) {
-      console.log('====== END ======');
-      return res.status(502).json({ success: false, message: data?.info || '地理编码失败' });
-    }
-
-    const first = data.geocodes[0];
-    const [lng, lat] = String(first.location || '').split(',');
-    const location = convertCoordinates(lng, lat);
-    if (!location) {
-      console.log('====== END ======');
-      return res.status(502).json({ success: false, message: '地理编码坐标无效' });
-    }
+    const location = await geocodeAddress(address);
 
     console.log('====== END ======');
     return res.json({
       success: true,
       address,
-      location,
-      formattedAddress: first.formatted_address || first.formattedAddress || ''
+      location
     });
   } catch (error) {
     console.error('接口错误:', error.message);

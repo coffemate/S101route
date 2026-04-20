@@ -119,6 +119,7 @@
     closureMarkers: [],
     scenicMarkers: []
   };
+  let closureRangeKm = { start: 21, end: 64 };
 
   const visibility = {
     s101: true,
@@ -172,54 +173,78 @@
   }
 
   async function loadAllRoutes(mapData) {
-    const fetchRoute = async (points) => {
-      const list = points.map(([lng, lat]) => `${lng},${lat}`);
-      const origin = list[0];
-      const destination = list[list.length - 1];
-      const waypoints = list.slice(1, -1).join('|');
+    const fetchRoute = async (plan) => {
+      const origin = plan.origin;
+      const destination = plan.destination;
+      const waypoints = (plan.waypoints || []).join('|');
       const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
       const data = await safeFetch(url);
       if (!data.success || !Array.isArray(data.polyline)) throw new Error('路线返回异常');
       return data.polyline;
     };
 
+    const s101Plan = mapData.routePlans.s101;
+    const westPlan = mapData.routePlans.west;
+    const g312Plan = mapData.routePlans.g312;
+
     const [s101Path, westPath, g312Path] = await Promise.all([
-      fetchRoute(mapData.s101Waypoints),
-      fetchRoute(mapData.westRoute),
-      fetchRoute(mapData.g312Route)
+      fetchRoute(s101Plan),
+      fetchRoute(westPlan),
+      fetchRoute(g312Plan)
     ]);
+
+    function haversineKm(a, b) {
+      const [lng1, lat1] = a;
+      const [lng2, lat2] = b;
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const s1 = Math.sin(dLat / 2) ** 2;
+      const s2 = Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(s1 + s2));
+    }
+
+    function cutPathByKm(path, startKm, endKm) {
+      if (!Array.isArray(path) || path.length < 2) return [];
+      let total = 0;
+      const result = [];
+      for (let i = 1; i < path.length; i += 1) {
+        const prev = path[i - 1];
+        const curr = path[i];
+        const seg = haversineKm(prev, curr);
+        const from = total;
+        const to = total + seg;
+        if (to >= startKm && from <= endKm) {
+          if (result.length === 0) result.push(prev);
+          result.push(curr);
+        }
+        total = to;
+      }
+      return result;
+    }
+
+    const closurePath = cutPathByKm(s101Path, closureRangeKm.start, closureRangeKm.end);
 
     layers.s101Polyline = new AMap.Polyline({ path: s101Path, strokeColor: '#ff6b00', strokeWeight: 5, zIndex: 80 });
     layers.westPolyline = new AMap.Polyline({ path: westPath, strokeColor: '#2e7d32', strokeWeight: 4, zIndex: 70 });
     layers.g312Polyline = new AMap.Polyline({ path: g312Path, strokeColor: '#1976d2', strokeWeight: 4, zIndex: 65 });
+    layers.closureLine = new AMap.Polyline({ path: closurePath, strokeColor: '#d32f2f', strokeWeight: 5, strokeStyle: 'solid', zIndex: 90 });
 
     layers.s101Polyline.setMap(map);
     layers.westPolyline.setMap(map);
     layers.g312Polyline.setMap(map);
+    layers.closureLine.setMap(map);
   }
 
   function loadStaticLayers(mapData) {
-    const closurePath = mapData.closurePoints.map(p => [p.lng, p.lat]);
-    layers.closureLine = new AMap.Polyline({
-      path: closurePath,
-      strokeColor: '#d32f2f',
-      strokeWeight: 4,
-      strokeStyle: 'dashed',
-      zIndex: 90
-    });
-    layers.closureLine.setMap(map);
-
-    layers.closureMarkers = mapData.closurePoints.map(p => createInfoMarker(p, '#d32f2f'));
     layers.scenicMarkers = mapData.scenicPoints.map(p => createInfoMarker(p, '#ff9800'));
-
-    layers.closureMarkers.forEach(m => m.setMap(map));
     layers.scenicMarkers.forEach(m => m.setMap(map));
   }
 
   function bindControls() {
     const mapping = {
       toggleS101: ['s101', 's101Polyline'],
-      toggleClosure: ['closure', ['closureLine', 'closureMarkers']],
+      toggleClosure: ['closure', ['closureLine']],
       toggleWest: ['west', 'westPolyline'],
       toggleG312: ['g312', 'g312Polyline'],
       toggleScenic: ['scenic', 'scenicMarkers']
@@ -265,7 +290,6 @@
     }
 
     map = new AMap.Map('map', {
-      center: [86.92, 43.92],
       zoom: 9,
       resizeEnable: true,
       viewMode: '2D'
@@ -273,14 +297,17 @@
 
     try {
       const mapData = await safeFetch(`${API_BASE}/api/map-data`);
+      closureRangeKm = mapData.closureRangeKm || closureRangeKm;
       loadStaticLayers(mapData);
       await loadAllRoutes(mapData);
+      map.on('click', e => {
+        console.log('坐标:', e.lnglat);
+      });
       map.setFitView([
         layers.s101Polyline,
         layers.westPolyline,
         layers.g312Polyline,
         layers.closureLine,
-        ...layers.closureMarkers,
         ...layers.scenicMarkers
       ]);
       bindControls();
