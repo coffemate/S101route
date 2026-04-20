@@ -286,8 +286,25 @@
 
     async function loadS101RealRoute() {
         const points = s101Waypoints.map(w => [w.lng, w.lat]);
+        const formatted = points.map(([lng, lat]) => `${lng},${lat}`);
+        const origin = formatted[0];
+        const destination = formatted[formatted.length - 1];
+        const waypoints = formatted.slice(1, -1).join('|');
+        const routeUrl = `/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
+
+        console.log("请求本地路线接口:", origin, destination);
+        setLoading(true, 'S101 开始请求');
         try {
-            const polylinePoints = await fetchRouteViaBackend(points, 'S101');
+            const response = await fetch(routeUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            if (!data.success || !Array.isArray(data.polyline) || data.polyline.length === 0) {
+                throw new Error(data.message || '后端未返回有效路线');
+            }
+            console.log("后端返回路线点数量:", data.polyline.length);
+            const polylinePoints = data.polyline;
             if (s101Polyline) s101Polyline.setMap(null);
             s101Polyline = new AMap.Polyline({
                 path: polylinePoints,
@@ -300,8 +317,10 @@
             s101Polyline.setMap(map);
             fitAllRoutes();
         } catch (error) {
-            console.error('S101路径规划请求失败:', error);
+            console.error("本地路线接口失败:", error);
             drawFallbackLine();
+        } finally {
+            setLoading(false, 'S101 请求结束');
         }
     }
 
