@@ -171,7 +171,7 @@
     return marker;
   }
 
-  async function loadRoute({ origin, destination, waypoints, color }) {
+  async function loadRoute({ origin, destination, waypoints, color, draw = true, weight = 5 }) {
     console.log('请求路线:', origin, destination);
     const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints || '')}`;
     const data = await safeFetch(url);
@@ -182,49 +182,116 @@
     console.log('路线点数量:', data.polyline.length);
     console.log('当前使用路径数据:', data.polyline.slice(0, 5));
 
+    if (!draw) return data.polyline;
     const polyline = new AMap.Polyline({
       path: data.polyline,
       strokeColor: color,
-      strokeWeight: 5,
+      strokeWeight: weight,
       strokeOpacity: 0.9
     });
     polyline.setMap(map);
     return polyline;
   }
 
-  async function loadAllRoutes() {
-    layers.s101Polyline = await loadRoute({
-      origin: '87.26,43.40',
-      destination: '85.97,43.94',
-      waypoints: '87.18,43.88|86.95,43.89|86.75,43.88',
-      color: '#FF6B00'
+  function haversineKm(startText, endText) {
+    const [lng1, lat1] = startText.split(',').map(Number);
+    const [lng2, lat2] = endText.split(',').map(Number);
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  async function loadS101SegmentedRoute() {
+    // 分段策略：避免整段请求被高德自动绕行，尽量贴近S101山路节点
+    const segmentPoints = [
+      '87.2600,43.4000',
+      '87.2450,43.4700',
+      '87.2300,43.5400',
+      '87.2150,43.6100',
+      '87.2000,43.6800',
+      '87.1900,43.7400',
+      '87.1800,43.8000',
+      '87.1800,43.8800',
+      '87.1000,43.9200',
+      '86.9500,43.8900',
+      '86.8500,43.9000',
+      '86.7500,43.8800',
+      '86.6300,43.9100'
+    ];
+    const waypointHint = {
+      7: '硫磺沟',
+      8: '百里丹霞入口',
+      11: '西沟村'
+    };
+
+    const segments = [];
+    for (let i = 1; i < segmentPoints.length; i += 1) {
+      segments.push({ start: segmentPoints[i - 1], end: segmentPoints[i], waypoint: waypointHint[i] || '' });
+    }
+
+    let fullPath = [];
+    for (const segment of segments) {
+      const km = haversineKm(segment.start, segment.end);
+      if (km > 10) {
+        console.warn('分段距离超过10km，请继续细分:', segment.start, segment.end, km.toFixed(2));
+      }
+      const segmentPath = await loadRoute({
+        origin: segment.start,
+        destination: segment.end,
+        waypoints: segment.waypoint,
+        color: '#FF6B00',
+        draw: false
+      });
+      if (!segmentPath || !segmentPath.length) continue;
+      console.log('当前段长度:', segmentPath.length);
+      if (fullPath.length > 0) {
+        fullPath = fullPath.concat(segmentPath.slice(1));
+      } else {
+        fullPath = fullPath.concat(segmentPath);
+      }
+    }
+
+    layers.s101Polyline = new AMap.Polyline({
+      path: fullPath,
+      strokeColor: '#FF6B00',
+      strokeWeight: 5,
+      strokeOpacity: 0.9,
+      zIndex: 80
     });
+    layers.s101Polyline.setMap(map);
+
+    const startIndex = Math.floor(fullPath.length * 0.18);
+    const endIndex = Math.floor(fullPath.length * 0.52);
+    const closureSegment = fullPath.slice(startIndex, endIndex);
+    layers.closureLine = new AMap.Polyline({
+      path: closureSegment,
+      strokeColor: '#d32f2f',
+      strokeWeight: 6,
+      strokeStyle: 'dashed',
+      zIndex: 90
+    });
+    layers.closureLine.setMap(map);
+  }
+
+  async function loadAllRoutes() {
+    await loadS101SegmentedRoute();
     layers.westPolyline = await loadRoute({
       origin: '87.278,44.009',
       destination: '86.637,43.91',
       waypoints: '87.207,43.93|87.10,43.93|86.82,43.97',
-      color: '#2e7d32'
+      color: '#2e7d32',
+      draw: true
     });
     layers.g312Polyline = await loadRoute({
       origin: '87.278,44.009',
       destination: '86.637,43.91',
       waypoints: '86.60,44.18|86.65,44.12',
-      color: '#1976d2'
+      color: '#1976d2',
+      draw: true
     });
-
-    if (layers.s101Polyline) {
-      const fullPath = layers.s101Polyline.getPath();
-      const startIndex = Math.floor(fullPath.length * 0.18);
-      const endIndex = Math.floor(fullPath.length * 0.52);
-      const closureSegment = fullPath.slice(startIndex, endIndex);
-      layers.closureLine = new AMap.Polyline({
-        path: closureSegment,
-        strokeColor: '#d32f2f',
-        strokeWeight: 6,
-        strokeStyle: 'dashed'
-      });
-      layers.closureLine.setMap(map);
-    }
   }
 
   function loadStaticLayers(mapData) {
