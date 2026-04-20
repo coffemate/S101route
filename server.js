@@ -2,6 +2,7 @@ const path = require('path');
 const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
+const cors = require('cors');
 
 dotenv.config();
 
@@ -17,6 +18,11 @@ if (!AMAP_WEB_KEY) {
 }
 
 app.use(express.static(__dirname));
+app.use(cors());
+app.use((req, _res, next) => {
+  console.log('请求:', req.method, req.url);
+  next();
+});
 
 app.use((req, _res, next) => {
   console.log('====== API Request ======');

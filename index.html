@@ -74,6 +74,22 @@
   const canvas = document.getElementById('mapCanvas');
   const ctx = canvas.getContext('2d');
   const statusEl = document.getElementById('status');
+  const API_BASE = 'http://127.0.0.1:3000';
+
+  async function safeFetch(url) {
+    const res = await fetch(url);
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (!res.ok) {
+        throw new Error(data.message || `HTTP ${res.status}`);
+      }
+      return data;
+    } catch (e) {
+      console.error('接口返回非JSON:', text);
+      throw new Error('后端返回错误（非JSON）');
+    }
+  }
 
   const state = {
     data: null,
@@ -248,19 +264,17 @@
     const origin = list[0];
     const destination = list[list.length - 1];
     const waypoints = list.slice(1, -1).join('|');
-    const url = `/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
+    const url = `${API_BASE}/api/route?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}`;
     setStatus(`加载${label}路线...`);
-    const resp = await fetch(url);
-    const data = await resp.json();
-    if (!resp.ok || !data.success) throw new Error(data.message || `${label}路线请求失败`);
+    const data = await safeFetch(url);
+    if (!data.success) throw new Error(data.message || `${label}路线请求失败`);
     return data.polyline;
   }
 
   async function initialize() {
     try {
       setStatus('加载地图基础数据...');
-      const baseResp = await fetch('/api/map-data');
-      const mapData = await baseResp.json();
+      const mapData = await safeFetch(`${API_BASE}/api/map-data`);
       state.data = mapData;
 
       // 计算边界
@@ -330,9 +344,8 @@
       if (!address) return;
       try {
         setStatus('地址解析中...');
-        const resp = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-        const data = await resp.json();
-        if (!resp.ok || !data.success) throw new Error(data.message || '地址解析失败');
+        const data = await safeFetch(`${API_BASE}/api/geocode?address=${encodeURIComponent(address)}`);
+        if (!data.success) throw new Error(data.message || '地址解析失败');
         state.queryPoint = data.location;
         centerPointOnCanvas(state.queryPoint);
         setStatus(`地址定位成功: ${address}`);
